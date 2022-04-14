@@ -3,11 +3,20 @@
         {
             "name": "Linux",
             "includePath": [
-                "${workspaceFolder}/**"
+                "${workspaceFolder}/**",
+                "/usr/include/",
+                "/usr/local/include/",
+                "/usr/src/linux-headers-5.4.0-107-generic/include/",
+                "/usr/src/linux-headers-5.4.0-107-generic/arch/x86/include/",
+                "/usr/src/linux-headers-5.4.0-107-generic/arch/x86/include/generated/"
             ],
-            "defines": [],
-            "cStandard": "c17",
-            "cppStandard": "c++17",
+            "defines": [
+                "__KERNEL__",
+                "MODULEs"
+            ],
+            "compilerPath": "/usr/bin/gcc",
+            "cStandard": "gnu17",
+            "cppStandard": "gnu++14",
             "intelliSenseMode": "linux-gcc-x64"
         }
     ],

@@ -26,10 +26,9 @@ static const struct modversion_info ____versions[]
 __used __section(__versions) = {
 	{ 0xb3753869, "module_layout" },
 	{ 0xe007de41, "kallsyms_lookup_name" },
-	{ 0x8b9200fd, "lookup_address" },
-	{ 0xdecd0b29, "__stack_chk_fail" },
 	{ 0xc5850110, "printk" },
-	{ 0x36e58bcd, "pv_ops" },
+	{ 0xdecd0b29, "__stack_chk_fail" },
+	{ 0x8b9200fd, "lookup_address" },
 	{ 0x2ea2c95c, "__x86_indirect_thunk_rax" },
 	{ 0xbdfb6dbb, "__fentry__" },
 };
@@ -37,4 +36,4 @@ __used __section(__versions) = {
 MODULE_INFO(depends, "");
 
 
-MODULE_INFO(srcversion, "D2C73A8B9D95151B3EDBADC");
+MODULE_INFO(srcversion, "C33A733086F286C0BFA897A");

@@ -3,7 +3,6 @@ cmd_/home/ch450/650_final/homework5-kit/sneaky_mod.o := gcc -Wp,-MD,/home/ch450/
 source_/home/ch450/650_final/homework5-kit/sneaky_mod.o := /home/ch450/650_final/homework5-kit/sneaky_mod.c
 
 deps_/home/ch450/650_final/homework5-kit/sneaky_mod.o := \
-    $(wildcard include/config/x86/64.h) \
   include/linux/kconfig.h \
     $(wildcard include/config/cpu/big/endian.h) \
     $(wildcard include/config/booger.h) \
@@ -97,6 +96,7 @@ deps_/home/ch450/650_final/homework5-kit/sneaky_mod.o := \
   arch/x86/include/asm/nops.h \
     $(wildcard include/config/mk7.h) \
     $(wildcard include/config/x86/p6/nop.h) \
+    $(wildcard include/config/x86/64.h) \
   include/asm-generic/barrier.h \
   include/linux/kasan-checks.h \
   arch/x86/include/asm/linkage.h \

