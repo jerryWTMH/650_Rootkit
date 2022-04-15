@@ -930,6 +930,7 @@ deps_/home/ch450/650_Rootkit/homework5-kit/sneaky_mod.o := \
   arch/x86/include/asm/sections.h \
   include/asm-generic/sections.h \
   include/generated/uapi/linux/version.h \
+  include/linux/dirent.h \
 
 /home/ch450/650_Rootkit/homework5-kit/sneaky_mod.o: $(deps_/home/ch450/650_Rootkit/homework5-kit/sneaky_mod.o)
 
