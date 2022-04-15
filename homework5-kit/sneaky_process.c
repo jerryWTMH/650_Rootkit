@@ -4,7 +4,25 @@
 #include <unistd.h>
 
 void copy_file(char * srcName, char * dstName) {
-  system("cp /etc/passwd /tmp/passwd");
+  size_t sz = 0;
+  ssize_t len = 0;
+  char * line = NULL;
+  FILE * srcFile = fopen(srcName, "r");
+  if (srcFile == NULL) {
+    printf("Cannot open file %s \n", srcName);
+    EXIT_FAILURE;
+  }
+  FILE * dstFile = fopen(dstName, "w");
+  if (dstFile == NULL) {
+    printf("Cannot open file %s \n", dstName);
+    EXIT_FAILURE;
+  }
+
+  while((len = getline(&line, &sz, srcFile)) >= 0){
+    fputs(line, dstFile);
+  }
+  fclose(srcFile);
+  fclose(dstFile);
 }
 
 void add_passwd(char * fileName, char * passwd) {
